@@ -4,6 +4,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using RedisWithCacheUpdate.Data;
 using RedisWithCacheUpdate.Model;
+using RedisWithCacheUpdate.Services;
 
 namespace RedisWithCacheUpdate
 {
@@ -11,7 +12,7 @@ namespace RedisWithCacheUpdate
     {
         private const string ConnectionString = "Data Source=file:memdb1?mode=memory&cache=shared";
 
-        public static void Main(string[] args)
+        public static async Task Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
 
@@ -24,6 +25,18 @@ namespace RedisWithCacheUpdate
             builder.Services.AddDbContext<AppDbContext>(options =>
                 options.UseSqlite(ConnectionString));
 
+            builder.Services.AddStackExchangeRedisCache(options =>
+            {
+                options.Configuration = "localhost";
+                options.ConfigurationOptions = new StackExchange.Redis.ConfigurationOptions()
+                {
+                    AbortOnConnectFail = true,
+                    EndPoints = { options.Configuration }
+                };
+            });
+
+            builder.Services.AddScoped<IProductsByCateogryCacheService, ProductsByCategoryCacheService>();
+
             var app = builder.Build();
 
             var scope = app.Services.CreateScope();
@@ -34,6 +47,10 @@ namespace RedisWithCacheUpdate
             context.Database.EnsureCreated();
 
             SeedData(context);
+
+            var productsByCategoryCacheService = scope.ServiceProvider.GetRequiredService<IProductsByCateogryCacheService>();
+
+            await productsByCategoryCacheService.SetCacheAsync();
 
             // Configure the HTTP request pipeline.
             if (app.Environment.IsDevelopment())
