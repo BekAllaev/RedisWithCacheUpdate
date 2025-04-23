@@ -107,7 +107,6 @@ namespace RedisWithCacheUpdate.Data
 dotnet ef migrations add InitialCreate
 ```
 4. Now we will register instance of our `DbContext`. We will do it in `Program` class, also here we will call method that will run migration and another method that will seed fake data into database.
-
 >Don't forget to add neccessary usings
 >```
 >using Bogus;
@@ -184,3 +183,139 @@ context.Database.EnsureCreated();
 
 SeedData(context);
 ```
+5. Now let's create model for statistics. This so called statistical model is used only for storing info about - how many products are in each category
+```
+namespace RedisWithCacheUpdate.StatisticsModel
+{
+    /// <summary>
+    /// Amount of product in each category
+    /// </summary>
+    public class ProductsByCategory
+    {
+        public string CategoryName { get; set; }
+
+        public int ProductCount { get; set; }
+    }
+}
+```
+6. Now we will create service that will work with this model, in other words this is repo for model `ProductsByCategory` but storage is cache. Here is interface:
+> I think concept of storing stastical information in the ***NoSQL*** is good, ***NoSQL*** is good for data where relations is not so principal, in our case this is stastical data, its nature is just to show info, stastical data is result of some calculations so I think it is good to store it in the `Redis`
+```
+using RedisWithCacheUpdate.StatisticsModel;
+
+namespace RedisWithCacheUpdate.Services
+{
+    /// <summary>
+    /// CRUD operations for products by categories statistics
+    /// All operations occur in cache
+    /// </summary>
+    public interface IProductsByCateogryCacheService
+    {
+        /// <summary>
+        /// Method is runned when app starts
+        /// </summary>
+        /// <returns></returns>
+        Task SetCacheAsync();
+
+        /// <summary>
+        /// Recalculate stastics and update cache
+        /// </summary>
+        /// <returns></returns>
+        Task UpdateCacheAsync();
+
+        Task<IEnumerable<ProductsByCategory>> GetListFromCacheAsync();
+    }
+}
+```
+
+And its implementation
+```
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Distributed;
+using RedisWithCacheUpdate.Data;
+using RedisWithCacheUpdate.Extensions;
+using RedisWithCacheUpdate.StatisticsModel;
+using System.Collections;
+using System.Collections.Generic;
+
+namespace RedisWithCacheUpdate.Services
+{
+    public class ProductsByCategoryCacheService(AppDbContext context, IDistributedCache cache, ILogger<ProductsByCategoryCacheService> logger) : IProductsByCateogryCacheService
+    {
+        private const string NULL_CACHE_ERROR_MESSAGE = "Key not exists nor were able to set the one";
+        private readonly DistributedCacheEntryOptions CacheOptions = new DistributedCacheEntryOptions()
+            .SetAbsoluteExpiration(TimeSpan.FromMinutes(20))
+            .SetSlidingExpiration(TimeSpan.FromMinutes(2));
+
+        public async Task<IEnumerable<ProductsByCategory>> GetListFromCacheAsync()
+        {
+            List<ProductsByCategory>? productsByCategories = await cache.GetAsync<List<ProductsByCategory>?>(Constants.PRODUCTS_BY_CATEGORIES_REDIS_KEY);
+
+            if (productsByCategories is null)
+            {
+                throw new ArgumentNullException(NULL_CACHE_ERROR_MESSAGE);
+            }
+
+            return productsByCategories;
+        }
+
+        public async Task SetCacheAsync()
+        {
+            await DropCacheIfExist();
+
+            var statistics = await GetStatistics();
+
+            await SetStatistics(statistics);
+        }
+
+        public async Task UpdateCacheAsync()
+        {
+            await cache.RemoveAsync(Constants.PRODUCTS_BY_CATEGORIES_REDIS_KEY);
+
+            var statistics = await GetStatistics();
+
+            await SetStatistics(statistics);
+        }
+
+        private async Task SetStatistics(List<ProductsByCategory> statistics)
+        {
+            await cache.SetAsync(Constants.PRODUCTS_BY_CATEGORIES_REDIS_KEY, statistics, CacheOptions);
+        }
+
+        private Task<List<ProductsByCategory>> GetStatistics()
+        {
+            var stastics = context
+                .Categories
+                .Select(x => new ProductsByCategory
+                {
+                    CategoryName = x.Name,
+                    ProductCount = x.Products.Count()
+                })
+                .ToListAsync();
+
+            return stastics;
+        }
+
+        private Task DropCacheIfExist()
+        {
+            if (!cache.TryGetValue(Constants.PRODUCTS_BY_CATEGORIES_REDIS_KEY, out object _))
+            {
+                return cache.RemoveAsync(Constants.PRODUCTS_BY_CATEGORIES_REDIS_KEY);
+            }
+            return Task.CompletedTask;
+        }
+    }
+}
+```
+7. Now let's register it in service collection. Also you can see method `SetCacheAsync`, we should call it in the `Program` so we intially set stastics when program starts. Register service using this code:
+> You can put it somewhere at the end of the services registration part
+```
+builder.Services.AddScoped<IProductsByCateogryCacheService, ProductsByCategoryCacheService>();
+```
+Call `SetCacheAsync` method like this
+> This code will be somewhere in the pipeline part
+```
+var productsByCategoryCacheService = scope.ServiceProvider.GetRequiredService<IProductsByCateogryCacheService>();
+await productsByCategoryCacheService.SetCacheAsync();
+```
+8. 
