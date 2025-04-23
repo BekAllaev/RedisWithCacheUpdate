@@ -1,4 +1,6 @@
-﻿namespace RedisWithCacheUpdate.Model
+﻿using System.Text.Json.Serialization;
+
+namespace RedisWithCacheUpdate.Model
 {
     public class Product
     {
@@ -10,6 +12,7 @@
 
         public double UnitPrice { get; set; }
 
-        public Category Category { get; set; }
+        [JsonIgnore]
+        public Category? Category { get; set; }
     }
 }
