@@ -36,6 +36,22 @@ namespace RedisWithCacheUpdate.Extensions
             return true;
         }
 
+        public static async Task<T> GetAsync<T>(this IDistributedCache cache, string key, DistributedCacheEntryOptions? options = null)
+        {
+            var data = await cache.GetAsync(key);
+
+            string json = Encoding.UTF8.GetString(data);
+
+            T? list = JsonSerializer.Deserialize<T>(json);
+
+            if (list is null)
+            {
+                throw new ArgumentNullException(nameof(list));
+            }
+
+            return list;
+        }
+
         public static async Task<T?> GetOrSetAsync<T>(this IDistributedCache cache, string key, Func<Task<T>> task, DistributedCacheEntryOptions? options = null)
         {
             if (options == null)
