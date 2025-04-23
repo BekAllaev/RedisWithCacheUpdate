@@ -17,11 +17,7 @@ namespace RedisWithCacheUpdate.Services
 
         public async Task<IEnumerable<ProductsByCategory>> GetListFromCacheAsync()
         {
-            List<ProductsByCategory>? productsByCategories = await cache.GetOrSetAsync(Constants.PRODUCTS_BY_CATEGORIES_REDIS_KEY, () =>
-            {
-                var stastics = GetStatistics();
-                return stastics;
-            });
+            List<ProductsByCategory>? productsByCategories = await cache.GetAsync<List<ProductsByCategory>?>(Constants.PRODUCTS_BY_CATEGORIES_REDIS_KEY);
 
             if (productsByCategories is null)
             {
