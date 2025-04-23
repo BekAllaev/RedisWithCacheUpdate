@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using RedisWithCacheUpdate.Data;
 using RedisWithCacheUpdate.Model;
+using RedisWithCacheUpdate.Services;
 
 namespace RedisWithCacheUpdate.Controllers
 {
@@ -15,10 +16,12 @@ namespace RedisWithCacheUpdate.Controllers
     public class ProductsController : ControllerBase
     {
         private readonly AppDbContext _context;
+        private readonly IProductsByCateogryCacheService _productsByCateogryCacheService;
 
-        public ProductsController(AppDbContext context)
+        public ProductsController(AppDbContext context, IProductsByCateogryCacheService productsByCateogryCacheService)
         {
             _context = context;
+            _productsByCateogryCacheService = productsByCateogryCacheService;
         }
 
         // GET: api/Products
@@ -80,6 +83,8 @@ namespace RedisWithCacheUpdate.Controllers
         {
             _context.Products.Add(product);
             await _context.SaveChangesAsync();
+
+            await _productsByCateogryCacheService.UpdateCacheAsync();
 
             return CreatedAtAction("GetProduct", new { id = product.Id }, product);
         }
