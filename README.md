@@ -613,3 +613,6 @@ namespace RedisWithCacheUpdate.Controllers
 Now let's run our web api (don't forget to run `Redis`). When you run it you can access `OpenAPI` json file that describes our web API on this address - `https://localhost:7103/openapi/v1.json`. 
 
 I save this file and then I import it into the Postman. Once you did it you can call get method of the `StatisticalController` and then create new product via POST method of the `ProductController`. After that execute GET method of the `StasticalController` once again and you will see that your statistics got updated. So this your are sure that cache is stored and you can manipulate it 
+
+## Some theory (from interesting conservations)
+...
