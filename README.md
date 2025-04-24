@@ -3,7 +3,7 @@ This lab is based on this article - https://codewithmukesh.com/blog/distributed-
 
 Also you might want take a look to the interface with which we will work in this lab - `IDistributedCache`. Microsoft docs - https://learn.microsoft.com/en-us/aspnet/core/performance/caching/distributed?view=aspnetcore-9.0
 
-### Description
+## Description
 In this lab I create three endpoints, two of them are simple CRUD controllers for reading and writing `Product` and `Category` entities and the third one is the endpoint that have only one `Get` verb and returns statistical data(later on I will describe this data in more details). 
 
 I have simulated this simple flow where statistics is stored in the cache.
@@ -60,8 +60,20 @@ namespace RedisWithCacheUpdate.Model
     }
 }
 ```
+2. Add `Constant` class, this class will contain all constants that will be used all over the app, for example in our case I store there cache key
+```
+namespace RedisWithCacheUpdate
+{
+    public static class Constants
+    {
+        public const string PRODUCTS_BY_CATEGORIES_REDIS_KEY = "productsByCategories";
 
-2. Let's create `AppDbContext` where we will describe our database
+        public const string PRODUCTS_BY_CATEGORY_REDIS_KEY = "productsByCategory";
+    }
+}
+```
+
+3. Let's create `AppDbContext` where we will describe our database
 ```
 using System.Collections.Generic;
 using System.Reflection.Emit;
@@ -102,11 +114,11 @@ namespace RedisWithCacheUpdate.Data
     }
 }
 ```
-3. Now let's run this command in order to generate migration
+4. Now let's run this command in order to generate migration
 ```
 dotnet ef migrations add InitialCreate
 ```
-4. Now we will register instance of our `DbContext`. We will do it in `Program` class, also here we will call method that will run migration and another method that will seed fake data into database.
+5. Now we will register instance of our `DbContext`. We will do it in `Program` class, also here we will call method that will run migration and another method that will seed fake data into database.
 >Don't forget to add neccessary usings
 >```
 >using Bogus;
@@ -183,7 +195,7 @@ context.Database.EnsureCreated();
 
 SeedData(context);
 ```
-5. Now let's create model for statistics. This so called statistical model is used only for storing info about - how many products are in each category
+6. Now let's create model for statistics. This so called statistical model is used only for storing info about - how many products are in each category
 ```
 namespace RedisWithCacheUpdate.StatisticsModel
 {
@@ -198,7 +210,7 @@ namespace RedisWithCacheUpdate.StatisticsModel
     }
 }
 ```
-6. Now we will create service that will work with this model, in other words this is repo for model `ProductsByCategory` but storage is cache. Here is interface:
+7. Now we will create service that will work with this model, in other words this is repo for model `ProductsByCategory` but storage is cache. Here is interface:
 > I think concept of storing stastical information in the ***NoSQL*** is good, ***NoSQL*** is good for data where relations is not so principal, in our case this is stastical data, its nature is just to show info, stastical data is result of some calculations so I think it is good to store it in the `Redis`
 ```
 using RedisWithCacheUpdate.StatisticsModel;
@@ -307,8 +319,8 @@ namespace RedisWithCacheUpdate.Services
     }
 }
 ```
-7. Now let's register it in service collection. Also you can see method `SetCacheAsync`, we should call it in the `Program` so we intially set stastics when program starts. Register service using this code:
-> You can put it somewhere at the end of the services registration part
+8. Now let's register it in service collection. Also you can see method `SetCacheAsync`, we should call it in the `Program` so we intially set stastics when program starts. Register service using this code:
+>You can put it somewhere at the end of the services registration part
 ```
 builder.Services.AddScoped<IProductsByCateogryCacheService, ProductsByCategoryCacheService>();
 ```
@@ -318,4 +330,286 @@ Call `SetCacheAsync` method like this
 var productsByCategoryCacheService = scope.ServiceProvider.GetRequiredService<IProductsByCateogryCacheService>();
 await productsByCategoryCacheService.SetCacheAsync();
 ```
-8. 
+
+At the end you `Program.cs` will look like this:
+```
+using Bogus;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+using RedisWithCacheUpdate.Data;
+using RedisWithCacheUpdate.Model;
+using RedisWithCacheUpdate.Services;
+
+namespace RedisWithCacheUpdate
+{
+    public class Program
+    {
+        private const string ConnectionString = "Data Source=file:memdb1?mode=memory&cache=shared";
+
+        public static async Task Main(string[] args)
+        {
+            var builder = WebApplication.CreateBuilder(args);
+
+            // Add services to the container.
+
+            builder.Services.AddControllers();
+            // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
+            builder.Services.AddOpenApi();
+
+            builder.Services.AddDbContext<AppDbContext>(options =>
+                options.UseSqlite(ConnectionString));
+
+            builder.Services.AddStackExchangeRedisCache(options =>
+            {
+                options.Configuration = "localhost";
+                options.ConfigurationOptions = new StackExchange.Redis.ConfigurationOptions()
+                {
+                    AbortOnConnectFail = true,
+                    EndPoints = { options.Configuration }
+                };
+            });
+
+            builder.Services.AddScoped<IProductsByCateogryCacheService, ProductsByCategoryCacheService>();
+
+            var app = builder.Build();
+
+            var scope = app.Services.CreateScope();
+
+            var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            // Make sure the database is created and then seed it.
+            context.Database.Migrate();
+            context.Database.EnsureCreated();
+
+            SeedData(context);
+
+            var productsByCategoryCacheService = scope.ServiceProvider.GetRequiredService<IProductsByCateogryCacheService>();
+
+            await productsByCategoryCacheService.SetCacheAsync();
+
+            // Configure the HTTP request pipeline.
+            if (app.Environment.IsDevelopment())
+            {
+                app.MapOpenApi();
+            }
+
+            app.UseHttpsRedirection();
+
+            app.UseAuthorization();
+
+
+            app.MapControllers();
+
+            app.Run();
+        }
+
+        static void SeedData(AppDbContext context)
+        {
+            // Create a Faker for the Category model.
+            var categoryFaker = new Faker<Category>()
+                .RuleFor(c => c.Id, f => f.IndexFaker + 1) // Auto-increment Id starting at 1
+                .RuleFor(c => c.Name, f => f.Commerce.Department())
+                .RuleFor(c => c.Description, f => f.Lorem.Sentence());
+
+            int productIdCounter = 1;
+
+            // Create a Faker for the Product model.
+            // Notice that the CategoryId will be assigned later for each product.
+            var productFaker = new Faker<Product>()
+                .RuleFor(p => p.Id, _ => productIdCounter++) // Auto-increment Id starting at 1
+                .RuleFor(p => p.Name, f => f.Commerce.ProductName())
+                .RuleFor(p => p.UnitPrice, f => Convert.ToDouble(f.Commerce.Price()));
+
+            // Generate 5 categories.
+            var categories = categoryFaker.Generate(5);
+            var allProducts = new List<Product>();
+
+            // For each category, generate between 1 to 10 products.
+            foreach (var category in categories)
+            {
+                int productCount = new Faker().Random.Int(1, 10);
+                // Clone the productFaker to assign CategoryId specifically for this category.
+                var productsForCategory = productFaker.Clone()
+                    .RuleFor(p => p.CategoryId, f => category.Id)
+                    .Generate(productCount);
+
+                allProducts.AddRange(productsForCategory);
+            }
+
+            // Add to the context and save changes.
+            context.Categories.AddRange(categories);
+            context.Products.AddRange(allProducts);
+            context.SaveChanges();
+        }
+    }
+}
+```
+
+9. Create `ProductController`, you can scaffold it with VS.
+```
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using RedisWithCacheUpdate.Data;
+using RedisWithCacheUpdate.Model;
+using RedisWithCacheUpdate.Services;
+
+namespace RedisWithCacheUpdate.Controllers
+{
+    [Route("api/[controller]")]
+    [ApiController]
+    public class ProductsController : ControllerBase
+    {
+        private readonly AppDbContext _context;
+        private readonly IProductsByCateogryCacheService _productsByCateogryCacheService;
+
+        public ProductsController(AppDbContext context, IProductsByCateogryCacheService productsByCateogryCacheService)
+        {
+            _context = context;
+            _productsByCateogryCacheService = productsByCateogryCacheService;
+        }
+
+        // GET: api/Products
+        [HttpGet]
+        public async Task<ActionResult<IEnumerable<Product>>> GetProducts()
+        {
+            return await _context.Products.ToListAsync();
+        }
+
+        // GET: api/Products/5
+        [HttpGet("{id}")]
+        public async Task<ActionResult<Product>> GetProduct(int id)
+        {
+            var product = await _context.Products.FindAsync(id);
+
+            if (product == null)
+            {
+                return NotFound();
+            }
+
+            return product;
+        }
+
+        // PUT: api/Products/5
+        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
+        [HttpPut("{id}")]
+        public async Task<IActionResult> PutProduct(int id, Product product)
+        {
+            if (id != product.Id)
+            {
+                return BadRequest();
+            }
+
+            _context.Entry(product).State = EntityState.Modified;
+
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                if (!ProductExists(id))
+                {
+                    return NotFound();
+                }
+                else
+                {
+                    throw;
+                }
+            }
+
+            return NoContent();
+        }
+
+        // POST: api/Products
+        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
+        [HttpPost]
+        public async Task<ActionResult<Product>> PostProduct(Product product)
+        {
+            _context.Products.Add(product);
+            await _context.SaveChangesAsync();
+
+            await _productsByCateogryCacheService.UpdateCacheAsync();
+
+            return CreatedAtAction("GetProduct", new { id = product.Id }, product);
+        }
+
+        // DELETE: api/Products/5
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> DeleteProduct(int id)
+        {
+            var product = await _context.Products.FindAsync(id);
+            if (product == null)
+            {
+                return NotFound();
+            }
+
+            _context.Products.Remove(product);
+            await _context.SaveChangesAsync();
+
+            return NoContent();
+        }
+
+        private bool ProductExists(int id)
+        {
+            return _context.Products.Any(e => e.Id == id);
+        }
+    }
+}
+```
+Actually this is just scaffolded controller but with little changes. We inject there `IProductsByCateogryCacheService _productsByCateogryCacheService` so we can call it right after new product was added. We do this in the `PostProduct` method. Let's take a closer look:
+```
+[HttpPost]
+public async Task<ActionResult<Product>> PostProduct(Product product)
+{
+    _context.Products.Add(product);
+    await _context.SaveChangesAsync();
+
+    await _productsByCateogryCacheService.UpdateCacheAsync();
+
+    return CreatedAtAction("GetProduct", new { id = product.Id }, product);
+}
+```
+Here after `await _context.SaveChangesAsync()` we call `await _productsByCateogryCacheService.UpdateCacheAsync()`, so this line of code updates the cache.
+
+10. At the end just add `StatisticsController`
+> Here we just insert `IDistributedCache` that will return list of cached statistical data
+```
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Caching.Distributed;
+using RedisWithCacheUpdate.Extensions;
+using RedisWithCacheUpdate.Services;
+using RedisWithCacheUpdate.StatisticsModel;
+
+namespace RedisWithCacheUpdate.Controllers
+{
+    [Route("api/[controller]")]
+    [ApiController]
+    public class StatisticController : ControllerBase
+    {
+        private readonly IDistributedCache distributedCache;
+
+        public StatisticController(IDistributedCache distributedCache)
+        { 
+            this.distributedCache = distributedCache;
+        }
+
+        [HttpGet]
+        public async Task<ActionResult<IEnumerable<ProductsByCategory>>> GetProductsByCategories()
+        {
+            var list = await distributedCache.GetAsync<List<ProductsByCategory>>(Constants.PRODUCTS_BY_CATEGORIES_REDIS_KEY);
+
+            return list;
+        }
+    }
+}
+```
+
+## Testing
+Now let's run our web api (don't forget to run `Redis`). When you run it you can access `OpenAPI` json file that describes our web API on this address - `https://localhost:7103/openapi/v1.json`. 
+
+I save this file and then I import it into the Postman. Once you did it you can call get method of the `StatisticalController` and then create new product via POST method of the `ProductController`. After that execute GET method of the `StasticalController` once again and you will see that your statistics got updated. So this your are sure that cache is stored and you can manipulate it 
