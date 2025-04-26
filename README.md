@@ -614,5 +614,23 @@ Now let's run our web api (don't forget to run `Redis`). When you run it you can
 
 I save this file and then I import it into the Postman. Once you did it you can call get method of the `StatisticalController` and then create new product via POST method of the `ProductController`. After that execute GET method of the `StasticalController` once again and you will see that your statistics got updated. So this your are sure that cache is stored and you can manipulate it 
 
-## Some theory (from interesting conservations)
-...
+## Some theory (from conservations)
+`Redis` stores cache in the RAM but it also can write cache into permanent storage into the disk but how this happens?  
+If you run this command in your `Redis-cli`:
+```
+CONFIG GET save
+```
+You will get next result:
+```
+1) "save"
+2) "3600 1 300 100 60 10000"
+```
+Maybe in your case configs will be different but what does it means?  
+First pair(3600 1) means that if in the last one hour (3600 seconds = 1 hour) there were only one change(it can be read/write/update) then all data written during this write will be written to the disk.  
+Second pair means the same but it says that it should be 100 operations during last 5 minutes, same for third pair, you can test it by changing configs with this command:
+```
+CONFIG SET save "900 1 300 100 60 10000"
+```
+This command above changes time limit for first pair from 1 hour to 15 minutes, so run this command, then do one write to your cache and then set timer to 15 minutes and then you can restart your `Redis` server and you will see that result of your last write operation is present, actually it was read from the disk once you have started `Redis`.
+
+Don't confuse it with cache that is written with no expiration time. Cache with no expiration time means that this cache will live as long as `Redis` runs but once you stop the server your cache will be cleared
