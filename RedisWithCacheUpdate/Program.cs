@@ -1,16 +1,17 @@
-
 using Bogus;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using RedisWithCacheUpdate.Data;
 using RedisWithCacheUpdate.Model;
 using RedisWithCacheUpdate.Services;
+using StackExchange.Redis;
 
 namespace RedisWithCacheUpdate
 {
     public class Program
     {
         private const string ConnectionString = "Data Source=file:memdb1?mode=memory&cache=shared";
+        private const string RedisConnectionStringName = "Redis";
 
         public static async Task Main(string[] args)
         {
@@ -34,6 +35,15 @@ namespace RedisWithCacheUpdate
                     EndPoints = { options.Configuration }
                 };
             });
+
+            var redisConnectionString = builder.Configuration.GetConnectionString(RedisConnectionStringName);
+
+            if (string.IsNullOrEmpty(redisConnectionString)) 
+                throw new ArgumentNullException(nameof(redisConnectionString));
+
+            var connectionMultiplexer = await ConnectionMultiplexer.ConnectAsync(redisConnectionString);
+
+            builder.Services.AddSingleton<ConnectionMultiplexer>(connectionMultiplexer);
 
             builder.Services.AddScoped<IProductsByCateogryCacheService, ProductsByCategoryCacheService>();
 

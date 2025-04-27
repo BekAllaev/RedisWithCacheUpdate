@@ -1,23 +1,36 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Distributed;
+using NRedisStack.RedisStackCommands;
 using RedisWithCacheUpdate.Data;
 using RedisWithCacheUpdate.Extensions;
+using RedisWithCacheUpdate.Model;
 using RedisWithCacheUpdate.StatisticsModel;
+using StackExchange.Redis;
 using System.Collections;
 using System.Collections.Generic;
+using System.Text.Json;
 
 namespace RedisWithCacheUpdate.Services
 {
-    public class ProductsByCategoryCacheService(AppDbContext context, IDistributedCache cache, ILogger<ProductsByCategoryCacheService> logger) : IProductsByCateogryCacheService
+    public class ProductsByCategoryCacheService(AppDbContext context, ConnectionMultiplexer connectionMultiplexer, ILogger<ProductsByCategoryCacheService> logger) : IProductsByCateogryCacheService
     {
         private const string NULL_CACHE_ERROR_MESSAGE = "Key not exists nor were able to set the one";
         private readonly DistributedCacheEntryOptions CacheOptions = new DistributedCacheEntryOptions()
-            .SetAbsoluteExpiration(TimeSpan.FromMinutes(20))
-            .SetSlidingExpiration(TimeSpan.FromMinutes(2));
+            .SetSlidingExpiration(TimeSpan.FromMinutes(30))
+            .SetAbsoluteExpiration(TimeSpan.FromHours(1));
+
+        public async Task<ProductsByCategory> GetByKeyAsync(string key)
+        {
+            string path = $"$[?(@.CategoryName==\"{key}\")]";
+
+            var productByCategory = await connectionMultiplexer.GetAsync<ProductsByCategory>(Constants.LIST_PRODUCTS_BY_CATEGORY_REDIS_KEY, path: path);
+
+            return productByCategory;
+        }
 
         public async Task<IEnumerable<ProductsByCategory>> GetListFromCacheAsync()
         {
-            List<ProductsByCategory>? productsByCategories = await cache.GetAsync<List<ProductsByCategory>?>(Constants.PRODUCTS_BY_CATEGORIES_REDIS_KEY);
+            List<ProductsByCategory>? productsByCategories = await connectionMultiplexer.GetAsync<List<ProductsByCategory>?>(Constants.LIST_PRODUCTS_BY_CATEGORY_REDIS_KEY);
 
             if (productsByCategories is null)
             {
@@ -38,7 +51,7 @@ namespace RedisWithCacheUpdate.Services
 
         public async Task UpdateCacheAsync()
         {
-            await cache.RemoveAsync(Constants.PRODUCTS_BY_CATEGORIES_REDIS_KEY);
+            await connectionMultiplexer.GetDatabase().JSON().DelAsync(Constants.LIST_PRODUCTS_BY_CATEGORY_REDIS_KEY);
 
             var statistics = await GetStatistics();
 
@@ -47,7 +60,7 @@ namespace RedisWithCacheUpdate.Services
 
         private async Task SetStatistics(List<ProductsByCategory> statistics)
         {
-            await cache.SetAsync(Constants.PRODUCTS_BY_CATEGORIES_REDIS_KEY, statistics, CacheOptions);
+            await connectionMultiplexer.SetAsync(Constants.LIST_PRODUCTS_BY_CATEGORY_REDIS_KEY, statistics, CacheOptions);
         }
 
         private Task<List<ProductsByCategory>> GetStatistics()
@@ -66,9 +79,9 @@ namespace RedisWithCacheUpdate.Services
 
         private Task DropCacheIfExist()
         {
-            if (!cache.TryGetValue(Constants.PRODUCTS_BY_CATEGORIES_REDIS_KEY, out object _))
+            if (!connectionMultiplexer.TryGetValue(Constants.LIST_PRODUCTS_BY_CATEGORY_REDIS_KEY, out object _))
             {
-                return cache.RemoveAsync(Constants.PRODUCTS_BY_CATEGORIES_REDIS_KEY);
+                return connectionMultiplexer.GetDatabase().JSON().DelAsync(Constants.LIST_PRODUCTS_BY_CATEGORY_REDIS_KEY);
             }
             return Task.CompletedTask;
         }

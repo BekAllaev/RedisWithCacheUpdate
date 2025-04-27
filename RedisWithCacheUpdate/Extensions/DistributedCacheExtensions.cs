@@ -2,6 +2,9 @@
 using System.Text.Json.Serialization;
 using System.Text.Json;
 using System.Text;
+using StackExchange.Redis;
+using NRedisStack.RedisStackCommands;
+using NRedisStack;
 
 namespace RedisWithCacheUpdate.Extensions
 {
@@ -12,37 +15,49 @@ namespace RedisWithCacheUpdate.Extensions
             PropertyNamingPolicy = null,
             WriteIndented = true,
             AllowTrailingCommas = true,
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
         };
-        public static Task SetAsync<T>(this IDistributedCache cache, string key, T value)
+        public static Task SetAsync<T>(this ConnectionMultiplexer connectionMultiplexer, string key, T value)
         {
-            return SetAsync(cache, key, value, new DistributedCacheEntryOptions()
+            return SetAsync(connectionMultiplexer, key, value, new DistributedCacheEntryOptions()
                 .SetSlidingExpiration(TimeSpan.FromMinutes(30))
                 .SetAbsoluteExpiration(TimeSpan.FromHours(1)));
         }
 
-        public static Task SetAsync<T>(this IDistributedCache cache, string key, T value, DistributedCacheEntryOptions options)
+        public static async Task SetAsync<T>(this ConnectionMultiplexer connectionMultiplexer, string key, T value, DistributedCacheEntryOptions options)
         {
-            var bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(value, serializerOptions));
-            return cache.SetAsync(key, bytes, options);
+            var db = connectionMultiplexer.GetDatabase();
+            var jsonDb = db.JSON();
+
+            string json = JsonSerializer.Serialize(value);
+
+            await jsonDb.SetAsync(Constants.LIST_PRODUCTS_BY_CATEGORY_REDIS_KEY, "$", json);
+
+            await db.KeyExpireAsync(Constants.LIST_PRODUCTS_BY_CATEGORY_REDIS_KEY, TimeSpan.FromMinutes(30));
         }
 
-        public static bool TryGetValue<T>(this IDistributedCache cache, string key, out T? value)
+        public static bool TryGetValue<T>(this ConnectionMultiplexer connectionMultiplexer, string key, out T? value)
         {
-            var val = cache.Get(key);
+            var jsonDb = GetJsonDbFromConnectionMultiplexer(connectionMultiplexer);
             value = default;
-            if (val == null) return false;
-            value = JsonSerializer.Deserialize<T>(val, serializerOptions);
+
+            var val = jsonDb.Get(key);
+            var valString = val.ToString();
+
+            if (string.IsNullOrEmpty(valString)) return false;
+            value = JsonSerializer.Deserialize<T>(val.ToString(), serializerOptions);
+
             return true;
         }
 
-        public static async Task<T> GetAsync<T>(this IDistributedCache cache, string key, DistributedCacheEntryOptions? options = null)
+        public static async Task<T> GetAsync<T>(this ConnectionMultiplexer connectionMultiplexer, string key, DistributedCacheEntryOptions? options = null, string? path = null)
         {
-            var data = await cache.GetAsync(key);
+            var jsonDb = GetJsonDbFromConnectionMultiplexer(connectionMultiplexer);
 
-            string json = Encoding.UTF8.GetString(data);
+            string json = (await jsonDb.GetAsync(Constants.LIST_PRODUCTS_BY_CATEGORY_REDIS_KEY), path ?? string.Empty).ToString();
+            string jsonWithoutParthesis = json.Trim('(', ')', ' ', ','); // without () from both ends
 
-            T? list = JsonSerializer.Deserialize<T>(json);
+            T? list = JsonSerializer.Deserialize<T>(jsonWithoutParthesis);
 
             if (list is null)
             {
@@ -52,7 +67,7 @@ namespace RedisWithCacheUpdate.Extensions
             return list;
         }
 
-        public static async Task<T?> GetOrSetAsync<T>(this IDistributedCache cache, string key, Func<Task<T>> task, DistributedCacheEntryOptions? options = null)
+        public static async Task<T?> GetOrSetAsync<T>(this ConnectionMultiplexer connectionMultiplexer, string key, Func<Task<T>> task, DistributedCacheEntryOptions? options = null)
         {
             if (options == null)
             {
@@ -60,16 +75,24 @@ namespace RedisWithCacheUpdate.Extensions
                 .SetSlidingExpiration(TimeSpan.FromMinutes(30))
                 .SetAbsoluteExpiration(TimeSpan.FromHours(1));
             }
-            if (cache.TryGetValue(key, out T? value) && value is not null)
+            if (connectionMultiplexer.TryGetValue(key, out T? value) && value is not null)
             {
                 return value;
             }
             value = await task();
             if (value is not null)
             {
-                await cache.SetAsync<T>(key, value, options);
+                await connectionMultiplexer.SetAsync<T>(key, value, options);
             }
             return value;
+        }
+
+        private static JsonCommands GetJsonDbFromConnectionMultiplexer(ConnectionMultiplexer connectionMultiplexer)
+        {
+            var db = connectionMultiplexer.GetDatabase();
+            var jsonDb = db.JSON();
+            
+            return jsonDb;
         }
     }
 }
