@@ -3,6 +3,9 @@ This lab is based on this article - https://codewithmukesh.com/blog/distributed-
 
 Also you might want take a look to the interface with which we will work in this lab - `IDistributedCache`. Microsoft docs - https://learn.microsoft.com/en-us/aspnet/core/performance/caching/distributed?view=aspnetcore-9.0
 
+## Don't miss
+This repo also has second branch(the name is - ***store-in-json-format***). The second branch contains logic where cache is saved in the JSON format and not in the HASH format. I decided to do the job with JSON can be useful for the cases when you work with particular elements of the list(update by id or get some record by id etc.) in case I use HASH it would be a little bit difficult
+
 ## Description
 In this lab I create three endpoints, two of them are simple CRUD controllers for reading and writing `Product` and `Category` entities and the third one is the endpoint that have only one `Get` verb and returns statistical data(later on I will describe this data in more details). 
 
