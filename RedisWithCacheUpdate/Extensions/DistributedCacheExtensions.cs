@@ -10,6 +10,7 @@ namespace RedisWithCacheUpdate.Extensions
 {
     public static class DistributedCacheExtensions
     {
+        private const string RootSign = "$";
         private static JsonSerializerOptions serializerOptions = new JsonSerializerOptions
         {
             PropertyNamingPolicy = null,
@@ -50,21 +51,15 @@ namespace RedisWithCacheUpdate.Extensions
             return true;
         }
 
-        public static async Task<T> GetAsync<T>(this ConnectionMultiplexer connectionMultiplexer, string key, DistributedCacheEntryOptions? options = null, string? path = null)
+        public static async Task<T?> GetAsync<T>(this ConnectionMultiplexer connectionMultiplexer, string key, 
+            DistributedCacheEntryOptions? options = null, string? path = null)
         {
             var jsonDb = GetJsonDbFromConnectionMultiplexer(connectionMultiplexer);
 
-            string json = (await jsonDb.GetAsync(Constants.LIST_PRODUCTS_BY_CATEGORY_REDIS_KEY), path ?? string.Empty).ToString();
-            string jsonWithoutParthesis = json.Trim('(', ')', ' ', ','); // without () from both ends
+            T? result = await jsonDb
+                .GetAsync<T>(Constants.LIST_PRODUCTS_BY_CATEGORY_REDIS_KEY, path: path ?? RootSign, serializerOptions: serializerOptions);
 
-            T? list = JsonSerializer.Deserialize<T>(jsonWithoutParthesis);
-
-            if (list is null)
-            {
-                throw new ArgumentNullException(nameof(list));
-            }
-
-            return list;
+            return result;
         }
 
         public static async Task<T?> GetOrSetAsync<T>(this ConnectionMultiplexer connectionMultiplexer, string key, Func<Task<T>> task, DistributedCacheEntryOptions? options = null)
