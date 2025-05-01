@@ -238,7 +238,7 @@ namespace RedisWithCacheUpdate.Services
         /// <returns></returns>
         Task UpdateCacheAsync();
 
-        Task<IEnumerable<ProductsByCategory>> GetListFromCacheAsync();
+        Task<List<ProductsByCategory>> GetListFromCacheAsync();
     }
 }
 ```
@@ -262,7 +262,7 @@ namespace RedisWithCacheUpdate.Services
             .SetAbsoluteExpiration(TimeSpan.FromMinutes(20))
             .SetSlidingExpiration(TimeSpan.FromMinutes(2));
 
-        public async Task<IEnumerable<ProductsByCategory>> GetListFromCacheAsync()
+        public async Task<List<ProductsByCategory>> GetListFromCacheAsync()
         {
             List<ProductsByCategory>? productsByCategories = await cache.GetAsync<List<ProductsByCategory>?>(Constants.PRODUCTS_BY_CATEGORIES_REDIS_KEY);
 
@@ -594,17 +594,17 @@ namespace RedisWithCacheUpdate.Controllers
     [ApiController]
     public class StatisticController : ControllerBase
     {
-        private readonly IDistributedCache distributedCache;
+        private readonly IProductsByCateogryCacheService productsByCategoriesCacheService;
 
-        public StatisticController(IDistributedCache distributedCache)
+        public StatisticController(IProductsByCateogryCacheService productsByCateogryCacheService)
         { 
-            this.distributedCache = distributedCache;
+            this.productsByCategoriesCacheService = productsByCateogryCacheService;
         }
 
         [HttpGet]
         public async Task<ActionResult<IEnumerable<ProductsByCategory>>> GetProductsByCategories()
         {
-            var list = await distributedCache.GetAsync<List<ProductsByCategory>>(Constants.PRODUCTS_BY_CATEGORIES_REDIS_KEY);
+            var list = await productsByCategoriesCacheService.GetListFromCacheAsync();
 
             return list;
         }
