@@ -15,7 +15,7 @@ namespace RedisWithCacheUpdate.Services
             .SetAbsoluteExpiration(TimeSpan.FromMinutes(20))
             .SetSlidingExpiration(TimeSpan.FromMinutes(2));
 
-        public async Task<IEnumerable<ProductsByCategory>> GetListFromCacheAsync()
+        public async Task<List<ProductsByCategory>> GetListFromCacheAsync()
         {
             List<ProductsByCategory>? productsByCategories = await cache.GetAsync<List<ProductsByCategory>?>(Constants.PRODUCTS_BY_CATEGORIES_REDIS_KEY);
 

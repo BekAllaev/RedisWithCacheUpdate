@@ -20,6 +20,6 @@ namespace RedisWithCacheUpdate.Services
         /// <returns></returns>
         Task UpdateCacheAsync();
 
-        Task<IEnumerable<ProductsByCategory>> GetListFromCacheAsync();
+        Task<List<ProductsByCategory>> GetListFromCacheAsync();
     }
 }
