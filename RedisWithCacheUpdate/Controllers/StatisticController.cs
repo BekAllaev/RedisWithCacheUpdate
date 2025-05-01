@@ -11,17 +11,17 @@ namespace RedisWithCacheUpdate.Controllers
     [ApiController]
     public class StatisticController : ControllerBase
     {
-        private readonly IDistributedCache distributedCache;
+        private readonly IProductsByCateogryCacheService productsByCategoriesCacheService;
 
-        public StatisticController(IDistributedCache distributedCache)
+        public StatisticController(IProductsByCateogryCacheService productsByCateogryCacheService)
         { 
-            this.distributedCache = distributedCache;
+            this.productsByCategoriesCacheService = productsByCateogryCacheService;
         }
 
         [HttpGet]
         public async Task<ActionResult<IEnumerable<ProductsByCategory>>> GetProductsByCategories()
         {
-            var list = await distributedCache.GetAsync<List<ProductsByCategory>>(Constants.PRODUCTS_BY_CATEGORIES_REDIS_KEY);
+            var list = await productsByCategoriesCacheService.GetListFromCacheAsync();
 
             return list;
         }
