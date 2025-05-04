@@ -19,7 +19,7 @@ namespace RedisWithCacheUpdate.Services
             .SetSlidingExpiration(TimeSpan.FromMinutes(30))
             .SetAbsoluteExpiration(TimeSpan.FromHours(1));
 
-        public async Task<ProductsByCategory> GetByKeyAsync(string key)
+        public async Task<ProductsByCategory?> GetByKeyAsync(string key)
         {
             string path = $"$[?(@.CategoryName==\"{key}\")]";
 
@@ -28,7 +28,7 @@ namespace RedisWithCacheUpdate.Services
             return productByCategory;
         }
 
-        public async Task<IEnumerable<ProductsByCategory>> GetListFromCacheAsync()
+        public async Task<List<ProductsByCategory>> GetListFromCacheAsync()
         {
             List<ProductsByCategory>? productsByCategories = await connectionMultiplexer.GetAsync<List<ProductsByCategory>?>(Constants.LIST_PRODUCTS_BY_CATEGORY_REDIS_KEY);
 
