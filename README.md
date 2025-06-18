@@ -6,6 +6,8 @@ Also you might want take a look to the interface with which we will work in this
 ## Don't miss
 This repo also has `main` branch. The `main` branch contains logic where cache is saved in the HASH format 
 
+Also don't miss - I have branch with title ***store-in-json-format-performance-check***, this branch is based on current branch. It is very interesting experiment where I compare performance of the data reading from the read stack (using CQRS we seperate data into write and read stack) against reading data from MS SQL Server and creating info on demand
+
 ## Description
 In this lab I create three endpoints, two of them are simple CRUD controllers for reading and writing `Product` and `Category` entities and the third one is the endpoint that have only one `Get` verb and returns statistical data(later on I will describe this data in more details). 
 
