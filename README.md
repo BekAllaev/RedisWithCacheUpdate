@@ -6,6 +6,8 @@ Also you might want take a look to the interface with which we will work in this
 ## Don't miss
 This repo also has second branch(the name is - ***store-in-json-format***). The second branch contains logic where cache is saved in the JSON format and not in the HASH format. I decided to do the job with JSON because it can be useful for the cases when you work with particular elements of the list(update by id or get some record by id etc.) in case I use HASH it would be a little bit difficult
 
+Also don't miss - I have third branch with title ***store-in-json-format-performance-check***. It is very interesting experiment where I compare performance of the data reading from the read stack (using CQRS we seperate data into write and read stack) against reading data from MS SQL Server and creating info on demand
+
 ## Description
 In this lab I create three endpoints, two of them are simple CRUD controllers for reading and writing `Product` and `Category` entities and the third one is the endpoint that have only one `Get` verb and returns statistical data(later on I will describe this data in more details). 
 
